@@ -56,4 +56,22 @@ describe('API', () => {
       .set('Authorization', `Bearer ${login.body.token}`)
       .expect(200, { ok: true });
   });
+
+  it('returns the pilot profile', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ username: 'johndoe', password: 'susiairtest' })
+      .expect(200);
+    const auth = `Bearer ${login.body.token}`;
+
+    await request(app.getHttpServer()).get('/pilot/me').expect(401);
+
+    const res = await request(app.getHttpServer())
+      .get('/pilot/me')
+      .set('Authorization', auth)
+      .expect(200);
+
+    expect(res.body).toMatchObject({ name: 'John Doe', total_flight_hours: 1444.5 });
+    expect(res.body.avatar_url).toMatch(/\/static\/avatar\.svg$/);
+  });
 });

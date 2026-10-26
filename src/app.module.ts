@@ -4,9 +4,10 @@ import { AuthModule } from './auth/auth.module.js';
 import { AuthGuard } from './common/auth.guard.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { DataModule } from './data/data.module.js';
+import { PilotModule } from './pilot/pilot.module.js';
 
 @Module({
-  imports: [DataModule, AuthModule],
+  imports: [DataModule, AuthModule, PilotModule],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_GUARD, useClass: AuthGuard },
