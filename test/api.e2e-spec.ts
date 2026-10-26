@@ -138,4 +138,32 @@ describe('API', () => {
       .set('Authorization', auth)
       .expect(400);
   });
+
+  it('returns documents with urgency', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ username: 'johndoe', password: 'susiairtest' })
+      .expect(200);
+    const auth = `Bearer ${login.body.token}`;
+
+    await request(app.getHttpServer()).get('/documents').expect(401);
+
+    const res = await request(app.getHttpServer())
+      .get('/documents')
+      .set('Authorization', auth)
+      .expect(200);
+
+    expect(res.body.today).toBe('2026-05-15');
+    expect(res.body.warningDays).toBe(30);
+    expect(res.body.documents).toHaveLength(5);
+    expect(res.body.documents.map((doc: { id: string }) => doc.id)).toEqual([
+      'doc_recurrent',
+      'doc_ppc',
+      'doc_license',
+      'doc_medical',
+      'doc_security',
+    ]);
+    expect(res.body.documents[2]).toMatchObject({ daysRemaining: 14, status: 'soon' });
+    expect(res.body.documents[4]).toMatchObject({ daysRemaining: -14, status: 'expired' });
+  });
 });
