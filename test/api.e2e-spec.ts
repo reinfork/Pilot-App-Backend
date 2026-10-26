@@ -74,4 +74,35 @@ describe('API', () => {
     expect(res.body).toMatchObject({ name: 'John Doe', total_flight_hours: 1444.5 });
     expect(res.body.avatar_url).toMatch(/\/static\/avatar\.svg$/);
   });
+
+  it('returns daily flight hours for a range', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ username: 'johndoe', password: 'susiairtest' })
+      .expect(200);
+    const auth = `Bearer ${login.body.token}`;
+
+    await request(app.getHttpServer())
+      .get('/flight-hours?from=2026-05-15&to=2026-05-16')
+      .expect(401);
+
+    const res = await request(app.getHttpServer())
+      .get('/flight-hours?from=2026-05-15&to=2026-05-16')
+      .set('Authorization', auth)
+      .expect(200);
+
+    expect(res.body).toEqual([
+      { date: '2026-05-15', hours: 6.4 },
+      { date: '2026-05-16', hours: 6.2 },
+    ]);
+
+    await request(app.getHttpServer())
+      .get('/flight-hours?from=2026-05-16&to=2026-05-15')
+      .set('Authorization', auth)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/flight-hours?from=2026-05-15&to=2026-02-30')
+      .set('Authorization', auth)
+      .expect(400);
+  });
 });
