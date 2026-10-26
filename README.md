@@ -1,114 +1,65 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Pilot App — Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS API for the Susi Air pilot app (schedules, flight hours, duty limits, documents).
+Live: `https://pilot-backend-alpha.vercel.app`
+Frontend repo: `https://github.com/reinfork/Pilot-App-Frontend`
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Run
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+Prerequisite: Node 22 (`engines` pins it).
 
 ```bash
-$ npm install
+npm ci
+npm run start:dev   # :8000, watch mode
+npm test            # unit (vitest)
+npm run test:e2e    # API contract tests
+npm run lint        # oxlint
+npm run build       # tsc -> dist/
+npm run start:prod  # node dist/main.js — run with cwd = this folder (data path is cwd-relative)
 ```
 
-## Compile and run the project
+`PORT` overrides the local port: `PORT=8125 npm run start:prod`.
 
-```bash
-# development
-$ npm run start
+## Environment
 
-# watch mode
-$ npm run start:dev
+| Var | Required where | Effect |
+|---|---|---|
+| `AUTH_SECRET` | Production / Vercel | HMAC signing key for tokens. Missing + `VERCEL=1` (or `NODE_ENV=production`) → boot throws. Unset locally → `dev-secret` fallback. Never commit it. |
+| `PORT` | Local prod runs | Defaults to `8000`. Ignored on Vercel (serverless, no listen). |
+| `VERCEL` | Auto-set by Vercel | `=1` skips `app.listen` (the serverless entry boots via `init()` instead). |
 
-# production mode
-$ npm run start:prod
-```
+No `.env` file is used or needed. Local dev works with zero env vars.
 
-## Run tests
+## API
 
-```bash
-# unit tests
-$ npm run test
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/auth/login` | `{username, password}` → `{token}`; 401 on bad creds |
+| GET | `/pilot/me` | `{name, total_flight_hours, avatar_url}` (absolute URL) |
+| GET | `/flight-hours?from&to` | `[{date, hours}]`, zero-filled gaps, 1 decimal |
+| GET | `/flight-hours/summary?range=` | `range=today=today` anchor; `windowDays`, `displayRangeDays`, `limit`, `max`, 15-point rolling `series` |
+| GET | `/documents` | urgency computed vs fixed `TODAY=2026-05-15`: `expired` / `soon` / `safe` |
+| GET | `/schedules?year&month` | month entries + `legend`, sorted |
 
-# e2e tests
-$ npm run test:e2e
+All routes except login require `Authorization: Bearer <token>`. Errors are uniform `{statusCode, message}` via a global filter; all inputs validated via a global pipe.
 
-# test coverage
-$ npm run test:cov
-```
+## Main choices (and why)
 
-## Deployment
+- **JSON seeding, no database.** The dataset is fixed demo content; a DB would be infra with no payoff. `DataService` reads `data/*.json` synchronously at boot.
+- **HMAC stateless tokens, no store, no JWT lib.** The previous in-memory `Set` breaks on serverless (each instance has its own memory → random 401s). Format `b64user.ts.nonce.sig`, 24h TTL, stdlib `crypto` only. Unique per login via nonce; verified cross-instance in tests.
+- **One serverless function, zero new deps.** `api/index.js` (plain JS) imports the tsc-compiled `dist/` (Vercel's TS pipeline can't emit decorator metadata, so the entry can't be TS importing `src/`), calls `init()` without listening, and exports the raw Express instance. Plain JS also keeps it invisible to `nest build`.
+- **Shared `configureApp`.** CORS / trust-proxy / static-avatar setup lives in `src/app.setup.ts`, used by both `main.ts` and the serverless entry — one place to change, not two.
+- **UTC date math server-side.** Rolling sums and `daysRemaining` are computed here; the frontend only scales the chart axis. `TODAY` is a constant (`2026-05-15`) so demo and tests agree.
+- **Open CORS.** Demo boundary; restrict to the frontend origin if this leaves demo use.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Deploy (Vercel)
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Import this repo, framework preset Other, build command `npm run build`. Set `AUTH_SECRET`. `vercel.json` handles the rest: all routes → `/api/index`, `data/**` bundled into the function, region `sin1`.
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+## Planned future changes
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Real user store (Postgres) replacing JSON seeds and the fixed demo credentials.
+- Refresh-token rotation and revocation (likely Redis) if logout-everywhere or expiry control matters.
+- Restrict CORS to the frontend origin; add rate limiting on `/auth/login`.
+- Guard `/flight-hours` range length (currently unbounded by design, fine for seeded data).
+- Expiry edge-case tests (TTL boundary, clock skew) for the HMAC scheme.
