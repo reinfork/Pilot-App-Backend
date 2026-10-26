@@ -37,4 +37,16 @@ describe('FlightHoursService', () => {
 
     expect(() => service.findByRange('2026-05-16', '2026-05-15')).toThrow(BadRequestException);
   });
+
+  it('builds the 1w summary around today', () => {
+    const service = new FlightHoursService(new DataService());
+    const summary = service.summary('1w');
+
+    expect(summary.today).toBe('2026-05-15');
+    expect(summary.series).toHaveLength(15);
+    expect(summary.series[0].date).toBe('2026-05-08');
+    expect(summary.series[7]).toEqual({ date: '2026-05-15', value: 25.2 });
+    expect(summary.series[14].date).toBe('2026-05-22');
+    expect(Math.max(...summary.series.map((point) => point.value))).toBe(44.7);
+  });
 });

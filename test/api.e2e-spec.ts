@@ -105,4 +105,37 @@ describe('API', () => {
       .set('Authorization', auth)
       .expect(400);
   });
+
+  it('returns the rolling summary series', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ username: 'johndoe', password: 'susiairtest' })
+      .expect(200);
+    const auth = `Bearer ${login.body.token}`;
+
+    await request(app.getHttpServer()).get('/flight-hours/summary?range=1w').expect(401);
+
+    const res = await request(app.getHttpServer())
+      .get('/flight-hours/summary?range=1w')
+      .set('Authorization', auth)
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      range: '1w',
+      today: '2026-05-15',
+      windowDays: 7,
+      displayRangeDays: 7,
+      limit: 40,
+      max: 45,
+    });
+    expect(res.body.series).toHaveLength(15);
+    expect(res.body.series[0].date).toBe('2026-05-08');
+    expect(res.body.series[7]).toEqual({ date: '2026-05-15', value: 25.2 });
+    expect(res.body.series[14].date).toBe('2026-05-22');
+
+    await request(app.getHttpServer())
+      .get('/flight-hours/summary?range=2w')
+      .set('Authorization', auth)
+      .expect(400);
+  });
 });
