@@ -7,9 +7,17 @@ import { DataModule } from './data/data.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { FlightHoursModule } from './flight-hours/flight-hours.module.js';
 import { PilotModule } from './pilot/pilot.module.js';
+import { SchedulesModule } from './schedules/schedules.module.js';
 
 @Module({
-  imports: [DataModule, AuthModule, PilotModule, FlightHoursModule, DocumentsModule],
+  imports: [
+    DataModule,
+    AuthModule,
+    PilotModule,
+    FlightHoursModule,
+    DocumentsModule,
+    SchedulesModule,
+  ],
   providers: [
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_GUARD, useClass: AuthGuard },

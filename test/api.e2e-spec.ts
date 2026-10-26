@@ -166,4 +166,37 @@ describe('API', () => {
     expect(res.body.documents[2]).toMatchObject({ daysRemaining: 14, status: 'soon' });
     expect(res.body.documents[4]).toMatchObject({ daysRemaining: -14, status: 'expired' });
   });
+
+  it('returns schedules for a month', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ username: 'johndoe', password: 'susiairtest' })
+      .expect(200);
+    const auth = `Bearer ${login.body.token}`;
+
+    await request(app.getHttpServer()).get('/schedules?year=2026&month=5').expect(401);
+
+    const res = await request(app.getHttpServer())
+      .get('/schedules?year=2026&month=5')
+      .set('Authorization', auth)
+      .expect(200);
+
+    expect(res.body).toMatchObject({ year: 2026, month: 5, today: '2026-05-15' });
+    expect(res.body.legend).toHaveLength(10);
+    expect(res.body.schedules).toHaveLength(21);
+    expect(
+      res.body.schedules.every((entry: { duty_date: string }) =>
+        entry.duty_date.startsWith('2026-05'),
+      ),
+    ).toBe(true);
+
+    await request(app.getHttpServer())
+      .get('/schedules?year=2026&month=13')
+      .set('Authorization', auth)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/schedules?year=2026')
+      .set('Authorization', auth)
+      .expect(400);
+  });
 });
